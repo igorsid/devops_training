@@ -33,6 +33,16 @@ Vagrant.configure("2") do |config|
       cat /etc/hosts | grep server2 || echo "192.168.10.12 server2" >> /etc/hosts
     SHELL
 
+    server1.vm.provision "shell", inline: <<-SHELL
+      mkdir -p /home/vagrant/.ssh
+      ssh-keygen -N "" -q -C server1 -f /home/vagrant/.ssh/id_rsa
+      mkdir -p /vagrant/keys2
+      ssh-keygen -N "" -q -C server2 -f /vagrant/keys2/id_rsa
+      cat /vagrant/keys2/id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
+      cp /home/vagrant/.ssh/id_rsa.pub /vagrant/keys2/authorized_keys
+      chown vagrant:vagrant /home/vagrant/.ssh/*
+    SHELL
+
   end
 
   config.vm.define "server2" do |server2|
@@ -43,6 +53,14 @@ Vagrant.configure("2") do |config|
 
     server2.vm.provision "shell", inline: <<-SHELL
       cat /etc/hosts | grep server1 || echo "192.168.10.11 server1" >> /etc/hosts
+    SHELL
+
+    server2.vm.provision "shell", inline: <<-SHELL
+      mkdir -p /home/vagrant/.ssh
+      cp /vagrant/keys2/id_rsa* /home/vagrant/.ssh/
+      cat /vagrant/keys2/authorized_keys >> /home/vagrant/.ssh/authorized_keys
+      rm -fr /vagrant/keys2
+      chown vagrant:vagrant /home/vagrant/.ssh/*
     SHELL
 
   end

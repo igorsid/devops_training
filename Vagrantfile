@@ -45,7 +45,7 @@ Vagrant.configure("2") do |config|
     tomcat1.vm.box = "bento/centos-7.5"
     tomcat1.vm.host_name = "tomcat1.localdomain"
     tomcat1.vm.network "private_network", ip: "192.168.10.21"
-    tomcat1.vm.network "forwarded_port", guest: 8080, host: 8081
+    #tomcat1.vm.network "forwarded_port", guest: 8080, host: 8081
 
     tomcat1.vm.provision "shell", inline: <<-SHELL
 
@@ -66,7 +66,7 @@ Vagrant.configure("2") do |config|
     tomcat2.vm.box = "bento/centos-7.5"
     tomcat2.vm.host_name = "tomcat2.localdomain"
     tomcat2.vm.network "private_network", ip: "192.168.10.22"
-    tomcat2.vm.network "forwarded_port", guest: 8080, host: 8082
+    #tomcat2.vm.network "forwarded_port", guest: 8080, host: 8082
 
     tomcat2.vm.provision "shell", inline: <<-SHELL
 

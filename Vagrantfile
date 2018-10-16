@@ -1,6 +1,22 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+TOMCAT_COUNT = 3
+
+ip_apache = "192.168.10.11"
+ip_tomcat = Array.new(TOMCAT_COUNT) { |i| "192.168.10.#{21+i}" }
+
+workers_properties = [
+  "worker.list=lb",
+  "worker.lb.type=lb",
+  "worker.lb.balance_workers=" + (1..TOMCAT_COUNT).map{ |i| "tomcat#{i}" }.join(","),
+  (1..TOMCAT_COUNT).map { |i| [
+    "worker.tomcat#{i}.type=ajp13",
+    "worker.tomcat#{i}.host=#{ip_tomcat[i-1]}",
+    "worker.tomcat#{i}.port=8009"
+    ] }
+  ].flatten().join("\n")
+
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
@@ -18,7 +34,7 @@ Vagrant.configure("2") do |config|
 
     apache.vm.box = "bento/centos-7.5"
     apache.vm.hostname = "apache.localdomain"
-    apache.vm.network "private_network", ip: "192.168.10.11"
+    apache.vm.network "private_network", ip: "#{ip_apache}"
     apache.vm.network "forwarded_port", guest: 80, host: 8080
 
     apache.vm.provision "shell", inline: <<-SHELL
@@ -26,60 +42,48 @@ Vagrant.configure("2") do |config|
       yum -y install httpd
       cp -v /vagrant/mod_jk.so /etc/httpd/modules/
       cp -v /vagrant/mod_jk.conf /etc/httpd/conf.d/
-      cp -v /vagrant/workers.properties /etc/httpd/conf/
+
+      #cp -v /vagrant/workers.properties /etc/httpd/conf/
+      echo "#{workers_properties}" > /etc/httpd/conf/workers.properties
+
       systemctl enable httpd
       systemctl start httpd
-
-      cat /etc/hosts | grep tomcat1 || echo "192.168.10.21 tomcat1" >> /etc/hosts
-      cat /etc/hosts | grep tomcat2 || echo "192.168.10.22 tomcat2" >> /etc/hosts
 
       #firewall-cmd --permanent --zone=public --add-port=80/tcp
       #firewall-cmd --reload
 
     SHELL
 
-  end
-
-  config.vm.define "tomcat1" do |tomcat1|
-
-    tomcat1.vm.box = "bento/centos-7.5"
-    tomcat1.vm.host_name = "tomcat1.localdomain"
-    tomcat1.vm.network "private_network", ip: "192.168.10.21"
-    #tomcat1.vm.network "forwarded_port", guest: 8080, host: 8081
-
-    tomcat1.vm.provision "shell", inline: <<-SHELL
-
-      yum -y install java-1.8.0-openjdk
-      yum -y install tomcat tomcat-webapps tomcat-admin-webapps
-      systemctl enable tomcat
-      systemctl start tomcat
-
-      mkdir /usr/share/tomcat/webapps/test
-      echo "tomcat1" >/usr/share/tomcat/webapps/test/index.html
-
-    SHELL
+    (1..TOMCAT_COUNT).each do |i|
+      apache.vm.provision "shell", inline: <<-SHELL
+        cat /etc/hosts | grep "tomcat#{i}" || echo "#{ip_tomcat[i-1]} tomcat#{i}" >> /etc/hosts
+      SHELL
+    end
 
   end
 
-  config.vm.define "tomcat2" do |tomcat2|
+  (1..TOMCAT_COUNT).each do |i|
+    config.vm.define "tomcat#{i}" do |tomcat|
 
-    tomcat2.vm.box = "bento/centos-7.5"
-    tomcat2.vm.host_name = "tomcat2.localdomain"
-    tomcat2.vm.network "private_network", ip: "192.168.10.22"
-    #tomcat2.vm.network "forwarded_port", guest: 8080, host: 8082
+      tomcat.vm.box = "bento/centos-7.5"
+      tomcat.vm.host_name = "tomcat#{i}.localdomain"
+      tomcat.vm.network "private_network", ip: "#{ip_tomcat[i-1]}"
 
-    tomcat2.vm.provision "shell", inline: <<-SHELL
+      tomcat.vm.provision "shell", inline: <<-SHELL
 
-      yum -y install java-1.8.0-openjdk
-      yum -y install tomcat tomcat-webapps tomcat-admin-webapps
-      systemctl enable tomcat
-      systemctl start tomcat
+        yum -y install java-1.8.0-openjdk
+        yum -y install tomcat tomcat-webapps tomcat-admin-webapps
+        systemctl enable tomcat
+        systemctl start tomcat
 
-      mkdir /usr/share/tomcat/webapps/test
-      echo "tomcat2" >/usr/share/tomcat/webapps/test/index.html
+        mkdir /usr/share/tomcat/webapps/test
+        echo "tomcat#{i}" >/usr/share/tomcat/webapps/test/index.html
 
-    SHELL
+        cat /etc/hosts | grep apache || echo "192.168.10.11 apache" >> /etc/hosts
 
+      SHELL
+
+    end
   end
 
   # Disable automatic box update checking. If you disable this, then

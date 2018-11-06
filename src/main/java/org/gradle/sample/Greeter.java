@@ -1,6 +1,7 @@
 package org.gradle.sample;
 
 import java.io.InputStream;
+import java.io.FileInputStream;
 import org.apache.log4j.LogManager;
 import org.apache.commons.io.IOUtils;
 
@@ -13,6 +14,15 @@ public class Greeter {
         }
         finally {
             greetingStr.close();
+        }
+    }
+    public String getServerip() throws Exception {
+        InputStream hostnameStr = new FileInputStream("/etc/hostname");
+        try {
+            return IOUtils.toString(hostnameStr).trim();
+        }
+        finally {
+            hostnameStr.close();
         }
     }
 }

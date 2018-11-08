@@ -36,10 +36,8 @@ node('master') {
             node(host) {
                 sh 'cat /etc/hostname'
                 println "Get version: '${version}'"
-                withCredentials([usernameColonPassword(credentialsId: 'fb1e45d9-8e07-439b-84b9-3d7af76a41e1', variable: 'nxcred')]) {
-                    sh "curl -X GET -u $nxcred -o test.war http://${nxhost}:8081/nexus/content/repositories/test/${version}/test.war"
-                }
-                sh "curl 'http://${lbhost}/jkmanager?cmd=update&from=list&w=lb&sw=tomcat1&vwa=1'"
+                sh "curl -X GET -o test.war http://${nxhost}:8081/nexus/content/repositories/test/${version}/test.war"
+                sh "curl 'http://${lbhost}/jkmanager?cmd=update&from=list&w=lb&sw=${host}&vwa=1'"
                 withCredentials([usernameColonPassword(credentialsId: 'f3bf3b66-9e90-4080-bf7d-3afb11400a29', variable: 'tccred')]) {
                     sh "curl -T test.war 'http://${tccred}@localhost:8080/manager/text/deploy?path=/test&update=true'"
                 }
@@ -49,7 +47,7 @@ node('master') {
                 if ( parseVersion(chk) != version ) {
                     error 'Application deploy failure'
                 }
-                sh "curl 'http://${lbhost}/jkmanager?cmd=update&from=list&w=lb&sw=tomcat1&vwa=0'"
+                sh "curl 'http://${lbhost}/jkmanager?cmd=update&from=list&w=lb&sw=${host}&vwa=0'"
             }
         }
 

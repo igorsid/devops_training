@@ -1,94 +1,55 @@
-
+// registry_ip, version -- defined in project params
 def repository = 'github.com/igorsid/devops_training.git'
-def branch = 'task7'
-def nxhost = '192.168.10.10'
-def lbhost = '192.168.10.10'
-def workern = 2
-def version = ''
-
-//@NonCPS
-def parseVersion = { String txt ->
-    def m = txt =~ /(\d+\.\d+\.\d+)/
-    '' + m[0][1]
-}
+def branch = 'task10'
+def chef_cfg = '/vagrant/chef-repo/.chef'
 
 node('master') {
 
-    stage('incversion') {
+    stage('check') {
+        println "registry_ip: ${registry_ip}"
+        println "version: ${version}"
+    }
+
+    stage('git_pull') {
         git url: "https://${repository}", branch: branch, changelog: false, poll: false
-        sh './gradlew incrementVersion'
-        def fprops = readFile 'gradle.properties'
-        version = parseVersion(fprops)
-        if ( ! version ) {
-            error 'Version defining error'
-        }
-        println "New version: '${version}'"
-        sh './gradlew build'
-        withCredentials([usernameColonPassword(credentialsId: '68e9fec3-d951-4ebe-92c5-89ada557e71a', variable: 'nxcred')]) {
-            sh "curl -X PUT -u $nxcred -T build/libs/${branch}-${version}.war http://${nxhost}:8081/nexus/content/repositories/${branch}/${version}/${branch}.war"
-        }
     }
 
-    stage('dockerimage') {
-        sh "docker build . -t ${branch}:${version} --build-arg nxhost=${nxhost} --build-arg version=${version}"
-        sh "docker tag ${branch}:${version} ${lbhost}:5000/${branch}:${version}"
-        sh "docker push ${lbhost}:5000/${branch}:${version}"
+    stage('chef_cfg') {
+        sh "cp -r ${chef_cfg} ./"
+        sh 'knife ssl fetch'
     }
 
-    stage('dockerswarm') {
-        def chk = sh returnStatus: true, script: 'docker node ls'
-        if ( chk != 0 ) {
-            sh "docker swarm init --advertise-addr ${lbhost}"
-            def token = sh returnStdout: true, script: 'docker swarm join-token -q worker'
-            token = token.replaceAll( /\s*$/, '' )
-            println "Worker token: ${token}"
-            for ( int i = 1; i <= workern; ++i ) {
-                node("worker${i}") {
-                    sh "docker swarm join --token ${token} ${lbhost}:2377"
-                }
+    stage('upd_attrs') {
+        def txtin = readFile "cookbooks/${branch}/attributes/default.rb"
+        def txtout = txtin.split('\n')
+            .collect() { line ->
+                line.contains("'registry_ip'") ? "node.default['registry_ip']='${registry_ip}'" :
+                line.contains("'version'") ? "node.default['version']='${version}'" :
+                line
             }
-        }
+            .join('\n') + '\n'
+        writeFile file: "cookbooks/${branch}/attributes/default.rb", text: txtout
     }
 
-    stage('dockerservice') {
-        def chk = sh returnStatus: true, script: "docker service ps ${branch}"
-        if ( chk != 0 ) {
-            def repn = workern + 1
-            sh "docker service create --name ${branch} --replicas ${repn} --publish 8080:8080 ${lbhost}:5000/${branch}:${version}"
-        } else {
-            sh "docker service update --image ${lbhost}:5000/${branch}:${version} ${branch}"
-        }
+    stage('chef_upload') {
+        sh 'knife environment from file environments/testing.json'
+        sh 'knife role from file roles/webapps.json'
+        sh 'knife cookbook upload task10'
+        sh 'knife node environment set worker testing'
+        sh 'knife role run_list set webapps "recipe[task10]"'
+        sh 'knife node run_list set worker "role[webapps]"'
     }
 
-    stage('validation') {
-        sleep 10
-        def chk = sh returnStdout: true, script: "curl http://${lbhost}:8080/${branch}/"
-        def chkver = parseVersion(chk)
-        println "Check version: ${chkver}"
-        if ( chkver == version ) {
-            echo 'Validation: OK'
-        } else {
-            error 'Application deploy failure'
-        }
-    }
-
-    stage('pushversion') {
-        //sh "git checkout ${branch}"
-        sh 'git add gradle.properties'
-        sh "git commit -m 'Increment version to ${version}'"
-        withCredentials([usernameColonPassword(credentialsId: 'ae917e0e-e1cc-4c9a-b411-f6a371877c5c', variable: 'gitcred')]) {
+    stage('git_push') {
+        sh "git add cookbooks/${branch}/attributes/default.rb environments/testing.json"
+        sh "git commit -m 'Switch cookbook to version ${version}'"
+        withCredentials([usernameColonPassword(credentialsId: '27801929-2c6d-4353-8653-01e4b5cc00fc', variable: 'gitcred')]) {
             sh "git push https://${gitcred}@${repository}"
         }
-        sh "git checkout master"
-        sh "git pull"
-        sh "git merge ${branch}"
-        withCredentials([usernameColonPassword(credentialsId: 'ae917e0e-e1cc-4c9a-b411-f6a371877c5c', variable: 'gitcred')]) {
-            sh "git push https://${gitcred}@${repository}"
-        }
-        sh "git tag -a v${version} -m 'Version ${version}'"
-        withCredentials([usernameColonPassword(credentialsId: 'ae917e0e-e1cc-4c9a-b411-f6a371877c5c', variable: 'gitcred')]) {
-            sh "git push https://${gitcred}@${repository} v${version}"
-        }
+    }
+
+    stage('chef_client') {
+        sh 'sudo chef-client'
     }
 
 }

@@ -1,0 +1,83 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description" : "Task11 stack template",
+
+    "Parameters" : {
+
+        "KeyName": {
+            "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+        },
+
+    },
+
+    "Resources" : {
+
+        "WebServerSecurityGroup" : {
+              "Type" : "AWS::EC2::SecurityGroup",
+              "Properties" : {
+                "GroupDescription" : "Enable HTTP(S) access + SSH access",
+                "SecurityGroupIngress" : [
+                  { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0" },
+                  { "IpProtocol" : "tcp", "FromPort" : "80", "ToPort" : "80", "CidrIp" : "0.0.0.0/0" },
+                  { "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0" }
+                ]
+              }
+            },
+
+        "TestInstance" : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId" : "ami-0bdf93799014acdc4",
+                "InstanceType" : "t2.micro",
+                "SecurityGroups" : [ { "Ref" : "WebServerSecurityGroup" } ],
+                "KeyName" : { "Ref" : "KeyName" },
+            },
+            "Metadata" : {
+                "AWS::CloudFormation::Init" : {
+                    "configSets" : {
+                        "Install" : [ "install_apache", "create_test_page" ]
+                    },
+                    "install_apache" : {
+                        "packages" : {
+                            "apt" : {
+                                "apache2" : []
+                            }
+                        },
+                        "services" : {
+                            "sysvinit" : {
+                                "httpd" : { "enabled" : "true", "ensureRunning" : "true" }
+                            }
+                        }
+                    },
+                    "create_test_page" : {
+                        "/var/www/html/index.html" : {
+                            "content" : {
+                                "Fn::Join" : [ "", [
+                                    "<html><body>",
+                                    "<h2>Hello !</h2>",
+                                    "<h4>Task11 test page</h4>",
+                                    "</body></html>"
+                                ] ]
+                            },
+                            "mode" : "000644",
+                            "owner" : "apache",
+                            "group" : "apache",
+                        }
+                    }
+                }
+            }
+        }
+
+    },
+
+    "Outputs" : {
+        "WebsiteURL" : {
+            "Description" : "Test Page URL",
+            "Value" : {
+                "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : [ "TestInstance", "PublicDnsName" ] } ] ]
+            }
+        }
+    }
+
+}
